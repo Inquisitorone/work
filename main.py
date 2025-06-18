@@ -91,7 +91,6 @@ TEXTS = {
 def tr(key, lang):
     return TEXTS.get(key, {}).get(lang, key)
 
-# Список городов только с нужными
 CITIES = {
     "uk": [
         "Київ", "Львів", "Одеса", "Харків", "Вінниця", "Дніпро", "Ужгород", "Інше"
@@ -102,11 +101,21 @@ CITIES = {
 }
 
 @dp.message_handler(commands=['start'], state='*')
-async def start_order(message: types.Message):
-    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("🇺🇦 Українська", "🇷🇺 Русский")
-    await message.answer("Оберіть мову / Выберите язык:", reply_markup=kb)
-    await OrderState.language.set()
+async def start_order(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get('language')
+    if lang:
+        # Язык уже выбран — сразу предлагаем выбрать город
+        city_kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+        city_kb.add(*CITIES[lang])
+        await message.answer(tr("city", lang), reply_markup=city_kb)
+        await OrderState.city.set()
+    else:
+        # Первый запуск — просим выбрать язык
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        kb.add("🇺🇦 Українська", "🇷🇺 Русский")
+        await message.answer("Оберіть мову / Выберите язык:", reply_markup=kb)
+        await OrderState.language.set()
 
 @dp.message_handler(state=OrderState.language)
 async def set_language(message: types.Message, state: FSMContext):
@@ -121,7 +130,6 @@ async def set_language(message: types.Message, state: FSMContext):
         await message.answer("Оберіть мову / Выберите язык:", reply_markup=kb)
         return
     await state.update_data(language=lang)
-    # Клавиатура выбора города
     city_kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     city_kb.add(*CITIES[lang])
     await message.answer(tr("city", lang), reply_markup=city_kb)
@@ -223,19 +231,4 @@ async def confirm_order(message: types.Message, state: FSMContext):
     data = await state.get_data()
     lang = data.get('language', 'uk')
     await message.answer(tr('order_accepted', lang), reply_markup=types.ReplyKeyboardRemove())
-    await state.finish()
-
-@dp.message_handler(lambda m: m.text in ["Скасувати", "Отменить"], state=OrderState.confirm)
-async def cancel_order(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    lang = data.get('language', 'uk')
-    await message.answer(tr('operation_canceled', lang), reply_markup=types.ReplyKeyboardRemove())
-    await state.finish()
-
-# Echo fallback
-@dp.message_handler(state=None)
-async def echo(message: types.Message):
-    await message.answer("Напишіть /start для початку нового замовлення.\nНапишите /start для начала нового заказа.")
-
-if __name__ == '__main__':
-    executor.start_polling(dp, skip_updates=True)
+    await state.reset_state(with_data=Fals
