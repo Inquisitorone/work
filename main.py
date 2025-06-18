@@ -10,8 +10,7 @@ API_TOKEN = os.getenv("TELEGRAM_API_TOKEN")
 if not API_TOKEN:
     raise RuntimeError("Set TELEGRAM_API_TOKEN")
 
-# Список Telegram user_id для админ-уведомлений:
-ADMIN_USER_IDS = [6418780785, 1234567890]  # ← здесь добавляй любые id через запятую
+ADMIN_USER_IDS = [6418780785, 1234567890]  # ← тут добавляй id админов через запятую
 
 bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
@@ -20,6 +19,7 @@ dp = Dispatcher(bot, storage=storage)
 class OrderState(StatesGroup):
     language = State()
     city = State()
+    service_type = State()   # ← новое состояние
     vin = State()
     dlink = State()
     model = State()
@@ -55,6 +55,14 @@ TEXTS = {
     "city_manual": {
         "uk": "Введіть місто вручну:",
         "ru": "Введите город вручную:"
+    },
+    "service_type": {
+        "uk": "Послуга віддалена чи фактична на СТО?",
+        "ru": "Услуга удалённая или фактическая на СТО?"
+    },
+    "service_types": {
+        "uk": ["Віддалена 🏠", "Фактична на СТО 🏢"],
+        "ru": ["Удалённая 🏠", "Фактическая на СТО 🏢"]
     },
     "vin": {
         "uk": "Введіть VIN:",
@@ -102,10 +110,10 @@ TEXTS = {
     },
     "fields": {
         "uk": [
-            "Місто", "VIN", "Dlink", "Модель", "Мова мультимедіа", "Ім'я менеджера", "Телефон менеджера"
+            "Місто", "Тип послуги", "VIN", "Dlink", "Модель", "Мова мультимедіа", "Ім'я менеджера", "Телефон менеджера"
         ],
         "ru": [
-            "Город", "VIN", "Dlink", "Модель", "Язык мультимедиа", "Имя менеджера", "Телефон менеджера"
+            "Город", "Тип услуги", "VIN", "Dlink", "Модель", "Язык мультимедиа", "Имя менеджера", "Телефон менеджера"
         ]
     },
     "cancel_btn": {
@@ -174,7 +182,6 @@ def get_cancel_kb(lang, extra_buttons=None):
 
 def is_valid_vin(vin):
     vin = vin.strip().upper()
-    # VIN: 17 символов, только латинские буквы и цифры, без I, O, Q
     return (
         len(vin) == 17 and
         re.fullmatch(r"[A-HJ-NPR-Z0-9]{17}", vin) is not None
@@ -230,22 +237,38 @@ async def cancel_form(message: types.Message, state: FSMContext):
 @dp.message_handler(state=OrderState.city)
 async def set_city(message: types.Message, state: FSMContext):
     if message.text in ["Скасувати анкету", "Отменить анкету"]:
-        return  # Уже обработано выше
+        return
     data = await state.get_data()
     lang = data.get('language', 'uk')
     manual_city = "Інше" if lang == "uk" else "Другое"
     if message.text in CITIES[lang] and message.text != manual_city:
         await state.update_data(city=message.text)
         await message.answer("✅")
-        await message.answer(tr('vin', lang), reply_markup=get_cancel_kb(lang))
-        await OrderState.vin.set()
+        service_kb = get_cancel_kb(lang, TEXTS["service_types"][lang])
+        await message.answer(tr('service_type', lang), reply_markup=service_kb)
+        await OrderState.service_type.set()
     elif message.text == manual_city:
         await message.answer(tr('city_manual', lang), reply_markup=get_cancel_kb(lang))
     else:
         await state.update_data(city=message.text)
         await message.answer("✅")
+        service_kb = get_cancel_kb(lang, TEXTS["service_types"][lang])
+        await message.answer(tr('service_type', lang), reply_markup=service_kb)
+        await OrderState.service_type.set()
+
+@dp.message_handler(state=OrderState.service_type)
+async def set_service_type(message: types.Message, state: FSMContext):
+    if message.text in ["Скасувати анкету", "Отменить анкету"]:
+        return
+    data = await state.get_data()
+    lang = data.get('language', 'uk')
+    if message.text in TEXTS["service_types"][lang]:
+        await state.update_data(service_type=message.text)
+        await message.answer("✅")
         await message.answer(tr('vin', lang), reply_markup=get_cancel_kb(lang))
         await OrderState.vin.set()
+    else:
+        await message.answer(tr('service_type', lang), reply_markup=get_cancel_kb(lang, TEXTS["service_types"][lang]))
 
 @dp.message_handler(state=OrderState.vin)
 async def set_vin(message: types.Message, state: FSMContext):
@@ -347,6 +370,7 @@ async def set_manager_phone(message: types.Message, state: FSMContext):
     summary = (
         f"Мова: {data.get('language', '').upper() if lang == 'uk' else 'Язык: RUS'}\n"
         f"{'Місто' if lang == 'uk' else 'Город'}: {data.get('city', '')}\n"
+        f"{'Тип послуги' if lang == 'uk' else 'Тип услуги'}: {data.get('service_type', '')}\n"
         f"VIN: {data.get('vin', '')}\n"
         f"Dlink: {data.get('dlink', '')}\n"
         f"{'Модель' if lang == 'uk' else 'Модель'}: {data.get('model', '')}\n"
@@ -376,6 +400,7 @@ async def send_admin_order(user, data):
         f"Нова заявка від @{username}\n"
         f"Мова: {data.get('language', '').upper() if lang == 'uk' else 'Язык: RUS'}\n"
         f"{'Місто' if lang == 'uk' else 'Город'}: {data.get('city', '')}\n"
+        f"{'Тип послуги' if lang == 'uk' else 'Тип услуги'}: {data.get('service_type', '')}\n"
         f"VIN: {data.get('vin', '')}\n"
         f"Dlink: {data.get('dlink', '')}\n"
         f"{'Модель' if lang == 'uk' else 'Модель'}: {data.get('model', '')}\n"
@@ -405,6 +430,7 @@ async def choose_field_to_edit(message: types.Message, state: FSMContext):
     lang = data.get('language', 'uk')
     field_map = {
         ("Місто", "Город"): OrderState.city,
+        ("Тип послуги", "Тип услуги"): OrderState.service_type,
         ("VIN",): OrderState.vin,
         ("Dlink",): OrderState.dlink,
         ("Модель",): OrderState.model,
