@@ -24,6 +24,21 @@ class OrderState(StatesGroup):
     manager_phone = State()
     confirm = State()
 
+INSTRUCTION = {
+    "uk": (
+        "Цей бот допоможе оформити заявку на автомобіль.\n"
+        "Просто обирайте варіанти або відповідайте на питання.\n"
+        "Для скасування — натисніть «Скасувати анкету».\n"
+        "Щоб переглянути свої заявки, напишіть /myorders."
+    ),
+    "ru": (
+        "Этот бот поможет оформить заявку на автомобиль.\n"
+        "Просто выбирайте варианты или отвечайте на вопросы.\n"
+        "Для отмены — нажмите «Отменить анкету».\n"
+        "Чтобы посмотреть свои заявки, напишите /myorders."
+    )
+}
+
 TEXTS = {
     "choose_lang": {
         "uk": "Оберіть мову:",
@@ -65,6 +80,10 @@ TEXTS = {
         "uk": "Введіть телефон менеджера:",
         "ru": "Введите телефон менеджера:"
     },
+    "share_phone_btn": {
+        "uk": "Поділитися номером",
+        "ru": "Поделиться номером"
+    },
     "summary_title": {
         "uk": "Перевірте дані:",
         "ru": "Проверьте данные:"
@@ -88,6 +107,10 @@ TEXTS = {
     "new_order_btn": {
         "uk": "Нове замовлення 📝",
         "ru": "Новый заказ 📝"
+    },
+    "cancel_form_btn": {
+        "uk": "Скасувати анкету",
+        "ru": "Отменить анкету"
     }
 }
 
@@ -126,13 +149,22 @@ MULTIMEDIA_LANGS = {
     "ru": ["Украинский", "Русский"]
 }
 
+def get_cancel_kb(lang, extra_buttons=None):
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    if extra_buttons:
+        kb.add(*extra_buttons)
+    kb.add(tr('cancel_form_btn', lang))
+    return kb
+
 @dp.message_handler(commands=['start'], state='*')
 async def start_order(message: types.Message, state: FSMContext):
     data = await state.get_data()
     lang = data.get('language')
     if lang:
+        await message.answer(INSTRUCTION[lang])
         city_kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
         city_kb.add(*CITIES[lang])
+        city_kb.add(tr('cancel_form_btn', lang))
         await message.answer(tr("city", lang), reply_markup=city_kb)
         await OrderState.city.set()
     else:
@@ -155,42 +187,58 @@ async def set_language(message: types.Message, state: FSMContext):
         return
     await state.update_data(language=lang)
     await message.answer("✅")
+    await message.answer(INSTRUCTION[lang])
     city_kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     city_kb.add(*CITIES[lang])
+    city_kb.add(tr('cancel_form_btn', lang))
     await message.answer(tr("city", lang), reply_markup=city_kb)
     await OrderState.city.set()
 
+@dp.message_handler(lambda m: m.text in ["Скасувати анкету", "Отменить анкету"], state='*')
+async def cancel_form(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get('language', 'uk')
+    start_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    start_kb.add(tr('new_order_btn', lang))
+    await state.finish()
+    await message.answer("Анкету скасовано.\nМожете розпочати нову заявку.", reply_markup=start_kb)
+
 @dp.message_handler(state=OrderState.city)
 async def set_city(message: types.Message, state: FSMContext):
+    if message.text in ["Скасувати анкету", "Отменить анкету"]:
+        return  # Уже обработано выше
     data = await state.get_data()
     lang = data.get('language', 'uk')
     manual_city = "Інше" if lang == "uk" else "Другое"
     if message.text in CITIES[lang] and message.text != manual_city:
         await state.update_data(city=message.text)
         await message.answer("✅")
-        await message.answer(tr('vin', lang), reply_markup=types.ReplyKeyboardRemove())
+        await message.answer(tr('vin', lang), reply_markup=get_cancel_kb(lang))
         await OrderState.vin.set()
     elif message.text == manual_city:
-        await message.answer(tr('city_manual', lang), reply_markup=types.ReplyKeyboardRemove())
+        await message.answer(tr('city_manual', lang), reply_markup=get_cancel_kb(lang))
     else:
         await state.update_data(city=message.text)
         await message.answer("✅")
-        await message.answer(tr('vin', lang))
+        await message.answer(tr('vin', lang), reply_markup=get_cancel_kb(lang))
         await OrderState.vin.set()
 
 @dp.message_handler(state=OrderState.vin)
 async def set_vin(message: types.Message, state: FSMContext):
+    if message.text in ["Скасувати анкету", "Отменить анкету"]:
+        return
     data = await state.get_data()
     lang = data.get('language', 'uk')
     await state.update_data(vin=message.text)
     await message.answer("✅")
-    dlink_kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    dlink_kb.add(*DLINKS[lang])
+    dlink_kb = get_cancel_kb(lang, DLINKS[lang])
     await message.answer(tr('dlink', lang), reply_markup=dlink_kb)
     await OrderState.dlink.set()
 
 @dp.message_handler(state=OrderState.dlink)
 async def set_dlink(message: types.Message, state: FSMContext):
+    if message.text in ["Скасувати анкету", "Отменить анкету"]:
+        return
     data = await state.get_data()
     lang = data.get('language', 'uk')
     manual = "Інше" if lang == "uk" else "Другое"
@@ -198,62 +246,103 @@ async def set_dlink(message: types.Message, state: FSMContext):
         if dlink_key in message.text:
             await state.update_data(dlink=message.text)
             await message.answer("✅")
-            models_kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-            models_kb.add(*DLINK_MODELS[dlink_key])
+            models_kb = get_cancel_kb(lang, DLINK_MODELS[dlink_key])
             await message.answer(tr('model', lang), reply_markup=models_kb)
             await OrderState.model.set()
             return
     if message.text == manual:
-        await message.answer(tr('dlink', lang) + " (Введіть свій варіант / Введите свой вариант):", reply_markup=types.ReplyKeyboardRemove())
+        await message.answer(tr('dlink', lang) + " (Введіть свій варіант / Введите свой вариант):", reply_markup=get_cancel_kb(lang))
     else:
         await state.update_data(dlink=message.text)
         await message.answer("✅")
-        models_kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-        models_kb.add("Інше" if lang == "uk" else "Другое")
+        models_kb = get_cancel_kb(lang, ["Інше" if lang == "uk" else "Другое"])
         await message.answer(tr('model', lang), reply_markup=models_kb)
         await OrderState.model.set()
 
 @dp.message_handler(state=OrderState.model)
 async def set_model(message: types.Message, state: FSMContext):
+    if message.text in ["Скасувати анкету", "Отменить анкету"]:
+        return
     data = await state.get_data()
     lang = data.get('language', 'uk')
     manual = "Інше" if lang == "uk" else "Другое"
     if message.text not in [manual]:
         await state.update_data(model=message.text)
         await message.answer("✅")
-        multimedia_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        multimedia_kb.add(*MULTIMEDIA_LANGS[lang])
+        multimedia_kb = get_cancel_kb(lang, MULTIMEDIA_LANGS[lang])
         await message.answer(tr('multimedia_lang', lang), reply_markup=multimedia_kb)
         await OrderState.multimedia_lang.set()
     else:
-        await message.answer(tr('model_manual', lang), reply_markup=types.ReplyKeyboardRemove())
+        await message.answer(tr('model_manual', lang), reply_markup=get_cancel_kb(lang))
 
 @dp.message_handler(state=OrderState.multimedia_lang)
 async def set_multimedia_lang(message: types.Message, state: FSMContext):
+    if message.text in ["Скасувати анкету", "Отменить анкету"]:
+        return
     data = await state.get_data()
     lang = data.get('language', 'uk')
     if message.text in MULTIMEDIA_LANGS[lang]:
         await state.update_data(multimedia_lang=message.text)
         await message.answer("✅")
-        await message.answer(tr('manager_name', lang), reply_markup=types.ReplyKeyboardRemove())
+        # Кнопка для отправки контакта
+        phone_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        phone_kb.add(types.KeyboardButton(tr('share_phone_btn', lang), request_contact=True))
+        phone_kb.add(tr('cancel_form_btn', lang))
+        await message.answer(tr('manager_name', lang), reply_markup=get_cancel_kb(lang))
+        await message.answer(tr('manager_phone', lang), reply_markup=phone_kb)
         await OrderState.manager_name.set()
     else:
         await state.update_data(multimedia_lang=message.text)
         await message.answer("✅")
-        await message.answer(tr('manager_name', lang))
+        phone_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        phone_kb.add(types.KeyboardButton(tr('share_phone_btn', lang), request_contact=True))
+        phone_kb.add(tr('cancel_form_btn', lang))
+        await message.answer(tr('manager_name', lang), reply_markup=get_cancel_kb(lang))
+        await message.answer(tr('manager_phone', lang), reply_markup=phone_kb)
         await OrderState.manager_name.set()
 
 @dp.message_handler(state=OrderState.manager_name)
 async def set_manager_name(message: types.Message, state: FSMContext):
+    if message.text in ["Скасувати анкету", "Отменить анкету"]:
+        return
     data = await state.get_data()
     lang = data.get('language', 'uk')
     await state.update_data(manager_name=message.text)
     await message.answer("✅")
-    await message.answer(tr('manager_phone', lang))
+    phone_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    phone_kb.add(types.KeyboardButton(tr('share_phone_btn', lang), request_contact=True))
+    phone_kb.add(tr('cancel_form_btn', lang))
+    await message.answer(tr('manager_phone', lang), reply_markup=phone_kb)
     await OrderState.manager_phone.set()
 
-@dp.message_handler(state=OrderState.manager_phone)
+@dp.message_handler(content_types=types.ContentType.CONTACT, state=OrderState.manager_phone)
+async def handle_manager_phone_contact(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get('language', 'uk')
+    phone = message.contact.phone_number
+    await state.update_data(manager_phone=phone)
+    await message.answer("✅")
+    # Сразу итоговое резюме
+    data = await state.get_data()
+    summary = (
+        f"Мова: {data.get('language', '').upper() if lang == 'uk' else 'Язык: RUS'}\n"
+        f"{'Місто' if lang == 'uk' else 'Город'}: {data.get('city', '')}\n"
+        f"VIN: {data.get('vin', '')}\n"
+        f"Dlink: {data.get('dlink', '')}\n"
+        f"{'Модель' if lang == 'uk' else 'Модель'}: {data.get('model', '')}\n"
+        f"{'Мова мультимедіа' if lang == 'uk' else 'Язык мультимедиа'}: {data.get('multimedia_lang', '')}\n"
+        f"{'Менеджер' if lang == 'uk' else 'Менеджер'}: {data.get('manager_name', '')}\n"
+        f"{'Телефон' if lang == 'uk' else 'Телефон'}: {phone}"
+    )
+    confirm_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    confirm_kb.add(tr('confirm_btn', lang), tr('cancel_btn', lang))
+    await message.answer(f"{tr('summary_title', lang)}\n\n{summary}", reply_markup=confirm_kb)
+    await OrderState.confirm.set()
+
+@dp.message_handler(state=OrderState.manager_phone, content_types=types.ContentType.TEXT)
 async def set_manager_phone(message: types.Message, state: FSMContext):
+    if message.text in ["Скасувати анкету", "Отменить анкету"]:
+        return
     data = await state.get_data()
     lang = data.get('language', 'uk')
     await state.update_data(manager_phone=message.text)
@@ -268,7 +357,7 @@ async def set_manager_phone(message: types.Message, state: FSMContext):
         f"{'Модель' if lang == 'uk' else 'Модель'}: {data.get('model', '')}\n"
         f"{'Мова мультимедіа' if lang == 'uk' else 'Язык мультимедиа'}: {data.get('multimedia_lang', '')}\n"
         f"{'Менеджер' if lang == 'uk' else 'Менеджер'}: {data.get('manager_name', '')}\n"
-        f"{'Телефон' if lang == 'uk' else 'Телефон'}: {data.get('manager_phone', '')}"
+        f"{'Телефон' if lang == 'uk' else 'Телефон'}: {message.text}"
     )
     confirm_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     confirm_kb.add(tr('confirm_btn', lang), tr('cancel_btn', lang))
@@ -297,8 +386,10 @@ async def cancel_order(message: types.Message, state: FSMContext):
 async def new_order_button(message: types.Message, state: FSMContext):
     data = await state.get_data()
     lang = data.get('language', 'uk')
+    await message.answer(INSTRUCTION[lang])
     city_kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     city_kb.add(*CITIES[lang])
+    city_kb.add(tr('cancel_form_btn', lang))
     await message.answer(tr("city", lang), reply_markup=city_kb)
     await OrderState.city.set()
 
