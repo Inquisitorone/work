@@ -10,7 +10,7 @@ API_TOKEN = os.getenv("TELEGRAM_API_TOKEN")
 if not API_TOKEN:
     raise RuntimeError("Set TELEGRAM_API_TOKEN")
 
-ADMIN_USER_IDS = [6418780785, 1234567890]  # ← тут добавляй id админов через запятую
+ADMIN_USER_IDS = [6418780785, 1234567890]
 
 bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
@@ -19,7 +19,7 @@ dp = Dispatcher(bot, storage=storage)
 class OrderState(StatesGroup):
     language = State()
     city = State()
-    service_type = State()   # ← новое состояние
+    service_type = State()
     vin = State()
     dlink = State()
     model = State()
@@ -186,6 +186,20 @@ def is_valid_vin(vin):
         len(vin) == 17 and
         re.fullmatch(r"[A-HJ-NPR-Z0-9]{17}", vin) is not None
     )
+
+def display_user_language(code):
+    if code == "uk":
+        return "УКРАЇНСЬКА"
+    if code == "ru":
+        return "РУССКИЙ"
+    return code.upper()
+
+def display_multimedia_lang(value, lang):
+    if value.lower().startswith("укр"):
+        return "Українська" if lang == "uk" else "Украинский"
+    if value.lower().startswith("рос") or value.lower().startswith("рус"):
+        return "Російська" if lang == "uk" else "Русский"
+    return value
 
 @dp.message_handler(commands=['start'], state='*')
 async def start_order(message: types.Message, state: FSMContext):
@@ -368,13 +382,13 @@ async def set_manager_phone(message: types.Message, state: FSMContext):
     # Сразу итоговое резюме
     data = await state.get_data()
     summary = (
-        f"Мова: {data.get('language', '').upper() if lang == 'uk' else 'Язык: RUS'}\n"
+        f"{'Мова' if lang == 'uk' else 'Язык'}: {display_user_language(data.get('language', ''))}\n"
         f"{'Місто' if lang == 'uk' else 'Город'}: {data.get('city', '')}\n"
         f"{'Тип послуги' if lang == 'uk' else 'Тип услуги'}: {data.get('service_type', '')}\n"
         f"VIN: {data.get('vin', '')}\n"
         f"Dlink: {data.get('dlink', '')}\n"
         f"{'Модель' if lang == 'uk' else 'Модель'}: {data.get('model', '')}\n"
-        f"{'Мова мультимедіа' if lang == 'uk' else 'Язык мультимедиа'}: {data.get('multimedia_lang', '')}\n"
+        f"{'Мова мультимедіа' if lang == 'uk' else 'Язык мультимедиа'}: {display_multimedia_lang(data.get('multimedia_lang', ''), lang)}\n"
         f"{'Менеджер' if lang == 'uk' else 'Менеджер'}: {data.get('manager_name', '')}\n"
         f"{'Телефон' if lang == 'uk' else 'Телефон'}: {message.text}"
     )
@@ -398,13 +412,13 @@ async def send_admin_order(user, data):
     username = user.username or ("Новий користувач" if lang == "uk" else "Новый пользователь")
     summary = (
         f"Нова заявка від @{username}\n"
-        f"Мова: {data.get('language', '').upper() if lang == 'uk' else 'Язык: RUS'}\n"
+        f"{'Мова' if lang == 'uk' else 'Язык'}: {display_user_language(data.get('language', ''))}\n"
         f"{'Місто' if lang == 'uk' else 'Город'}: {data.get('city', '')}\n"
         f"{'Тип послуги' if lang == 'uk' else 'Тип услуги'}: {data.get('service_type', '')}\n"
         f"VIN: {data.get('vin', '')}\n"
         f"Dlink: {data.get('dlink', '')}\n"
         f"{'Модель' if lang == 'uk' else 'Модель'}: {data.get('model', '')}\n"
-        f"{'Мова мультимедіа' if lang == 'uk' else 'Язык мультимедиа'}: {data.get('multimedia_lang', '')}\n"
+        f"{'Мова мультимедіа' if lang == 'uk' else 'Язык мультимедиа'}: {display_multimedia_lang(data.get('multimedia_lang', ''), lang)}\n"
         f"{'Менеджер' if lang == 'uk' else 'Менеджер'}: {data.get('manager_name', '')}\n"
         f"{'Телефон' if lang == 'uk' else 'Телефон'}: {data.get('manager_phone', '')}"
     )
