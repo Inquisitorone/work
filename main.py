@@ -22,7 +22,6 @@ class OrderState(StatesGroup):
     multimedia_lang = State()
     manager_name = State()
     manager_phone = State()
-    order_number = State()
     confirm = State()
 
 TEXTS = {
@@ -66,10 +65,6 @@ TEXTS = {
         "uk": "Введіть телефон менеджера:",
         "ru": "Введите телефон менеджера:"
     },
-    "order_number": {
-        "uk": "Введіть номер замовлення або напишіть 'Пропустити':",
-        "ru": "Введите номер заказа или напишите 'Пропустить':"
-    },
     "summary_title": {
         "uk": "Перевірте дані:",
         "ru": "Проверьте данные:"
@@ -83,8 +78,8 @@ TEXTS = {
         "ru": "Отменить"
     },
     "order_accepted": {
-        "uk": "Замовлення прийняте! Дякую!",
-        "ru": "Заказ принят! Спасибо!"
+        "uk": "Замовлення прийняте! Дякую! ✅",
+        "ru": "Заказ принят! Спасибо! ✅"
     },
     "operation_canceled": {
         "uk": "Операцію скасовано.",
@@ -159,6 +154,7 @@ async def set_language(message: types.Message, state: FSMContext):
         await message.answer("Оберіть мову / Выберите язык:", reply_markup=kb)
         return
     await state.update_data(language=lang)
+    await message.answer("✅")
     city_kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     city_kb.add(*CITIES[lang])
     await message.answer(tr("city", lang), reply_markup=city_kb)
@@ -171,12 +167,14 @@ async def set_city(message: types.Message, state: FSMContext):
     manual_city = "Інше" if lang == "uk" else "Другое"
     if message.text in CITIES[lang] and message.text != manual_city:
         await state.update_data(city=message.text)
+        await message.answer("✅")
         await message.answer(tr('vin', lang), reply_markup=types.ReplyKeyboardRemove())
         await OrderState.vin.set()
     elif message.text == manual_city:
         await message.answer(tr('city_manual', lang), reply_markup=types.ReplyKeyboardRemove())
     else:
         await state.update_data(city=message.text)
+        await message.answer("✅")
         await message.answer(tr('vin', lang))
         await OrderState.vin.set()
 
@@ -185,6 +183,7 @@ async def set_vin(message: types.Message, state: FSMContext):
     data = await state.get_data()
     lang = data.get('language', 'uk')
     await state.update_data(vin=message.text)
+    await message.answer("✅")
     dlink_kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     dlink_kb.add(*DLINKS[lang])
     await message.answer(tr('dlink', lang), reply_markup=dlink_kb)
@@ -198,6 +197,7 @@ async def set_dlink(message: types.Message, state: FSMContext):
     for dlink_key in DLINK_MODELS:
         if dlink_key in message.text:
             await state.update_data(dlink=message.text)
+            await message.answer("✅")
             models_kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
             models_kb.add(*DLINK_MODELS[dlink_key])
             await message.answer(tr('model', lang), reply_markup=models_kb)
@@ -207,6 +207,7 @@ async def set_dlink(message: types.Message, state: FSMContext):
         await message.answer(tr('dlink', lang) + " (Введіть свій варіант / Введите свой вариант):", reply_markup=types.ReplyKeyboardRemove())
     else:
         await state.update_data(dlink=message.text)
+        await message.answer("✅")
         models_kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
         models_kb.add("Інше" if lang == "uk" else "Другое")
         await message.answer(tr('model', lang), reply_markup=models_kb)
@@ -219,6 +220,7 @@ async def set_model(message: types.Message, state: FSMContext):
     manual = "Інше" if lang == "uk" else "Другое"
     if message.text not in [manual]:
         await state.update_data(model=message.text)
+        await message.answer("✅")
         multimedia_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
         multimedia_kb.add(*MULTIMEDIA_LANGS[lang])
         await message.answer(tr('multimedia_lang', lang), reply_markup=multimedia_kb)
@@ -232,10 +234,12 @@ async def set_multimedia_lang(message: types.Message, state: FSMContext):
     lang = data.get('language', 'uk')
     if message.text in MULTIMEDIA_LANGS[lang]:
         await state.update_data(multimedia_lang=message.text)
+        await message.answer("✅")
         await message.answer(tr('manager_name', lang), reply_markup=types.ReplyKeyboardRemove())
         await OrderState.manager_name.set()
     else:
         await state.update_data(multimedia_lang=message.text)
+        await message.answer("✅")
         await message.answer(tr('manager_name', lang))
         await OrderState.manager_name.set()
 
@@ -244,6 +248,7 @@ async def set_manager_name(message: types.Message, state: FSMContext):
     data = await state.get_data()
     lang = data.get('language', 'uk')
     await state.update_data(manager_name=message.text)
+    await message.answer("✅")
     await message.answer(tr('manager_phone', lang))
     await OrderState.manager_phone.set()
 
@@ -252,17 +257,8 @@ async def set_manager_phone(message: types.Message, state: FSMContext):
     data = await state.get_data()
     lang = data.get('language', 'uk')
     await state.update_data(manager_phone=message.text)
-    await message.answer(tr('order_number', lang))
-    await OrderState.order_number.set()
-
-@dp.message_handler(state=OrderState.order_number)
-async def set_order_number(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    lang = data.get('language', 'uk')
-    if (lang == "uk" and message.text != "Пропустити") or (lang == "ru" and message.text != "Пропустить"):
-        await state.update_data(order_number=message.text)
-    else:
-        await state.update_data(order_number="Немає" if lang == "uk" else "Нет")
+    await message.answer("✅")
+    # Сразу итоговое резюме
     data = await state.get_data()
     summary = (
         f"Мова: {data.get('language', '').upper() if lang == 'uk' else 'Язык: RUS'}\n"
@@ -272,8 +268,7 @@ async def set_order_number(message: types.Message, state: FSMContext):
         f"{'Модель' if lang == 'uk' else 'Модель'}: {data.get('model', '')}\n"
         f"{'Мова мультимедіа' if lang == 'uk' else 'Язык мультимедиа'}: {data.get('multimedia_lang', '')}\n"
         f"{'Менеджер' if lang == 'uk' else 'Менеджер'}: {data.get('manager_name', '')}\n"
-        f"{'Телефон' if lang == 'uk' else 'Телефон'}: {data.get('manager_phone', '')}\n"
-        f"{'Номер замовлення' if lang == 'uk' else 'Номер заказа'}: {data.get('order_number', '')}"
+        f"{'Телефон' if lang == 'uk' else 'Телефон'}: {data.get('manager_phone', '')}"
     )
     confirm_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     confirm_kb.add(tr('confirm_btn', lang), tr('cancel_btn', lang))
