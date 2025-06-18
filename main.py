@@ -89,6 +89,22 @@ TEXTS = {
         "uk": "Підтвердити",
         "ru": "Подтвердить"
     },
+    "edit_btn": {
+        "uk": "Змінити дані",
+        "ru": "Изменить данные"
+    },
+    "edit_field": {
+        "uk": "Що ви хочете змінити?",
+        "ru": "Что вы хотите изменить?"
+    },
+    "fields": {
+        "uk": [
+            "Місто", "VIN", "Dlink", "Модель", "Мова мультимедіа", "Ім'я менеджера", "Телефон менеджера"
+        ],
+        "ru": [
+            "Город", "VIN", "Dlink", "Модель", "Язык мультимедиа", "Имя менеджера", "Телефон менеджера"
+        ]
+    },
     "cancel_btn": {
         "uk": "Скасувати",
         "ru": "Отменить"
@@ -336,7 +352,7 @@ async def set_manager_phone(message: types.Message, state: FSMContext):
         f"{'Телефон' if lang == 'uk' else 'Телефон'}: {message.text}"
     )
     confirm_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    confirm_kb.add(tr('confirm_btn', lang), tr('cancel_btn', lang))
+    confirm_kb.add(tr('confirm_btn', lang), tr('edit_btn', lang), tr('cancel_btn', lang))
     await message.answer(f"{tr('summary_title', lang)}\n\n{summary}", reply_markup=confirm_kb)
     await OrderState.confirm.set()
 
@@ -348,6 +364,39 @@ async def confirm_order(message: types.Message, state: FSMContext):
     new_order_kb.add(tr('new_order_btn', lang))
     await message.answer(tr('order_accepted', lang), reply_markup=new_order_kb)
     await state.reset_state(with_data=False)
+
+@dp.message_handler(lambda m: m.text in ["Змінити дані", "Изменить данные"], state=OrderState.confirm)
+async def edit_data(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get('language', 'uk')
+    fields_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    fields_kb.add(*TEXTS["fields"][lang])
+    fields_kb.add(tr('cancel_form_btn', lang))
+    await message.answer(tr('edit_field', lang), reply_markup=fields_kb)
+    await state.set_state("edit_field_choice")
+
+@dp.message_handler(state="edit_field_choice")
+async def choose_field_to_edit(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get('language', 'uk')
+    field_map = {
+        ("Місто", "Город"): OrderState.city,
+        ("VIN",): OrderState.vin,
+        ("Dlink",): OrderState.dlink,
+        ("Модель",): OrderState.model,
+        ("Мова мультимедіа", "Язык мультимедиа"): OrderState.multimedia_lang,
+        ("Ім'я менеджера", "Имя менеджера"): OrderState.manager_name,
+        ("Телефон менеджера",): OrderState.manager_phone,
+    }
+    for keys, state_obj in field_map.items():
+        if message.text in keys:
+            await message.answer(
+                f"Оберіть заново: {message.text}" if lang == "uk" else f"Выберите заново: {message.text}",
+                reply_markup=get_cancel_kb(lang)
+            )
+            await state.set_state(state_obj.state)
+            return
+    await message.answer(tr('edit_field', lang), reply_markup=get_cancel_kb(lang))
 
 @dp.message_handler(lambda m: m.text in ["Скасувати", "Отменить"], state=OrderState.confirm)
 async def cancel_order(message: types.Message, state: FSMContext):
