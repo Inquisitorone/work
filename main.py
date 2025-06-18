@@ -55,8 +55,8 @@ TEXTS = {
         "ru": "Введите свою модель:"
     },
     "multimedia_lang": {
-        "uk": "Введіть мову мультимедіа:",
-        "ru": "Введите язык мультимедиа:"
+        "uk": "Оберіть мову мультимедіа:",
+        "ru": "Выберите язык мультимедиа:"
     },
     "manager_name": {
         "uk": "Введіть ім'я менеджера:",
@@ -113,7 +113,6 @@ DLINKS = {
     "ru": ["Dlink 3 🔌", "Dlink 4 ⚡️", "Dlink 5 🔋", "Другое"]
 }
 
-# Модели для каждого Dlink
 DLINK_MODELS = {
     "Dlink 3": [
         "Qin Plus", "DM-i", "EV", "Song Pro", "Yuan Plus", "Song Max",
@@ -125,6 +124,11 @@ DLINK_MODELS = {
     "Dlink 5": [
         "Song Plus", "Song L", "Song L DMI", "Seal", "Sealion 07", "Інше", "Другое"
     ]
+}
+
+MULTIMEDIA_LANGS = {
+    "uk": ["Українська", "Російська"],
+    "ru": ["Украинский", "Русский"]
 }
 
 @dp.message_handler(commands=['start'], state='*')
@@ -191,7 +195,6 @@ async def set_dlink(message: types.Message, state: FSMContext):
     data = await state.get_data()
     lang = data.get('language', 'uk')
     manual = "Інше" if lang == "uk" else "Другое"
-    # Определяем выбранный Dlink
     for dlink_key in DLINK_MODELS:
         if dlink_key in message.text:
             await state.update_data(dlink=message.text)
@@ -216,7 +219,9 @@ async def set_model(message: types.Message, state: FSMContext):
     manual = "Інше" if lang == "uk" else "Другое"
     if message.text not in [manual]:
         await state.update_data(model=message.text)
-        await message.answer(tr('multimedia_lang', lang), reply_markup=types.ReplyKeyboardRemove())
+        multimedia_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        multimedia_kb.add(*MULTIMEDIA_LANGS[lang])
+        await message.answer(tr('multimedia_lang', lang), reply_markup=multimedia_kb)
         await OrderState.multimedia_lang.set()
     else:
         await message.answer(tr('model_manual', lang), reply_markup=types.ReplyKeyboardRemove())
@@ -225,9 +230,14 @@ async def set_model(message: types.Message, state: FSMContext):
 async def set_multimedia_lang(message: types.Message, state: FSMContext):
     data = await state.get_data()
     lang = data.get('language', 'uk')
-    await state.update_data(multimedia_lang=message.text)
-    await message.answer(tr('manager_name', lang))
-    await OrderState.manager_name.set()
+    if message.text in MULTIMEDIA_LANGS[lang]:
+        await state.update_data(multimedia_lang=message.text)
+        await message.answer(tr('manager_name', lang), reply_markup=types.ReplyKeyboardRemove())
+        await OrderState.manager_name.set()
+    else:
+        await state.update_data(multimedia_lang=message.text)
+        await message.answer(tr('manager_name', lang))
+        await OrderState.manager_name.set()
 
 @dp.message_handler(state=OrderState.manager_name)
 async def set_manager_name(message: types.Message, state: FSMContext):
