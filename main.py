@@ -43,8 +43,12 @@ TEXTS = {
         "ru": "Введите VIN:"
     },
     "dlink": {
-        "uk": "Введіть Dlink:",
-        "ru": "Введите Dlink:"
+        "uk": "Оберіть Dlink:",
+        "ru": "Выберите Dlink:"
+    },
+    "dlink_manual": {
+        "uk": "Введіть свій варіант Dlink:",
+        "ru": "Введите свой вариант Dlink:"
     },
     "model": {
         "uk": "Введіть модель:",
@@ -104,6 +108,11 @@ CITIES = {
     ]
 }
 
+DLINKS = {
+    "uk": ["Dlink 3 🔌", "Dlink 4 ⚡️", "Dlink 5 🔋", "Інше"],
+    "ru": ["Dlink 3 🔌", "Dlink 4 ⚡️", "Dlink 5 🔋", "Другое"]
+}
+
 @dp.message_handler(commands=['start'], state='*')
 async def start_order(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -158,16 +167,26 @@ async def set_vin(message: types.Message, state: FSMContext):
     data = await state.get_data()
     lang = data.get('language', 'uk')
     await state.update_data(vin=message.text)
-    await message.answer(tr('dlink', lang))
+    dlink_kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    dlink_kb.add(*DLINKS[lang])
+    await message.answer(tr('dlink', lang), reply_markup=dlink_kb)
     await OrderState.dlink.set()
 
 @dp.message_handler(state=OrderState.dlink)
 async def set_dlink(message: types.Message, state: FSMContext):
     data = await state.get_data()
     lang = data.get('language', 'uk')
-    await state.update_data(dlink=message.text)
-    await message.answer(tr('model', lang))
-    await OrderState.model.set()
+    manual = "Інше" if lang == "uk" else "Другое"
+    if message.text in DLINKS[lang] and message.text != manual:
+        await state.update_data(dlink=message.text)
+        await message.answer(tr('model', lang), reply_markup=types.ReplyKeyboardRemove())
+        await OrderState.model.set()
+    elif message.text == manual:
+        await message.answer(tr('dlink_manual', lang), reply_markup=types.ReplyKeyboardRemove())
+    else:
+        await state.update_data(dlink=message.text)
+        await message.answer(tr('model', lang))
+        await OrderState.model.set()
 
 @dp.message_handler(state=OrderState.model)
 async def set_model(message: types.Message, state: FSMContext):
