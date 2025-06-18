@@ -231,4 +231,19 @@ async def confirm_order(message: types.Message, state: FSMContext):
     data = await state.get_data()
     lang = data.get('language', 'uk')
     await message.answer(tr('order_accepted', lang), reply_markup=types.ReplyKeyboardRemove())
-    await state.reset_state(with_data=Fals
+    await state.reset_state(with_data=False)  # исправлено
+
+@dp.message_handler(lambda m: m.text in ["Скасувати", "Отменить"], state=OrderState.confirm)
+async def cancel_order(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get('language', 'uk')
+    await message.answer(tr('operation_canceled', lang), reply_markup=types.ReplyKeyboardRemove())
+    await state.reset_state(with_data=False)  # исправлено
+
+# Echo fallback
+@dp.message_handler(state=None)
+async def echo(message: types.Message):
+    await message.answer("Напишіть /start для початку нового замовлення.\nНапишите /start для начала нового заказа.")
+
+if __name__ == '__main__':
+    executor.start_polling(dp, skip_updates=True)
