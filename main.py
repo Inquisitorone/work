@@ -46,13 +46,13 @@ TEXTS = {
         "uk": "Оберіть Dlink:",
         "ru": "Выберите Dlink:"
     },
-    "dlink_manual": {
-        "uk": "Введіть свій варіант Dlink:",
-        "ru": "Введите свой вариант Dlink:"
-    },
     "model": {
-        "uk": "Введіть модель:",
-        "ru": "Введите модель:"
+        "uk": "Оберіть модель:",
+        "ru": "Выберите модель:"
+    },
+    "model_manual": {
+        "uk": "Введіть свою модель:",
+        "ru": "Введите свою модель:"
     },
     "multimedia_lang": {
         "uk": "Введіть мову мультимедіа:",
@@ -111,6 +111,20 @@ CITIES = {
 DLINKS = {
     "uk": ["Dlink 3 🔌", "Dlink 4 ⚡️", "Dlink 5 🔋", "Інше"],
     "ru": ["Dlink 3 🔌", "Dlink 4 ⚡️", "Dlink 5 🔋", "Другое"]
+}
+
+# Модели для каждого Dlink
+DLINK_MODELS = {
+    "Dlink 3": [
+        "Qin Plus", "DM-i", "EV", "Song Pro", "Yuan Plus", "Song Max",
+        "Destroyer 05", "Dolphins", "Tang Dm-i", "Інше", "Другое"
+    ],
+    "Dlink 4": [
+        "Han 22", "Tang 22", "Song Plus", "Song Champ", "Frigate 07", "Seal EV", "Інше", "Другое"
+    ],
+    "Dlink 5": [
+        "Song Plus", "Song L", "Song L DMI", "Seal", "Sealion 07", "Інше", "Другое"
+    ]
 }
 
 @dp.message_handler(commands=['start'], state='*')
@@ -177,24 +191,35 @@ async def set_dlink(message: types.Message, state: FSMContext):
     data = await state.get_data()
     lang = data.get('language', 'uk')
     manual = "Інше" if lang == "uk" else "Другое"
-    if message.text in DLINKS[lang] and message.text != manual:
-        await state.update_data(dlink=message.text)
-        await message.answer(tr('model', lang), reply_markup=types.ReplyKeyboardRemove())
-        await OrderState.model.set()
-    elif message.text == manual:
-        await message.answer(tr('dlink_manual', lang), reply_markup=types.ReplyKeyboardRemove())
+    # Определяем выбранный Dlink
+    for dlink_key in DLINK_MODELS:
+        if dlink_key in message.text:
+            await state.update_data(dlink=message.text)
+            models_kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+            models_kb.add(*DLINK_MODELS[dlink_key])
+            await message.answer(tr('model', lang), reply_markup=models_kb)
+            await OrderState.model.set()
+            return
+    if message.text == manual:
+        await message.answer(tr('dlink', lang) + " (Введіть свій варіант / Введите свой вариант):", reply_markup=types.ReplyKeyboardRemove())
     else:
         await state.update_data(dlink=message.text)
-        await message.answer(tr('model', lang))
+        models_kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+        models_kb.add("Інше" if lang == "uk" else "Другое")
+        await message.answer(tr('model', lang), reply_markup=models_kb)
         await OrderState.model.set()
 
 @dp.message_handler(state=OrderState.model)
 async def set_model(message: types.Message, state: FSMContext):
     data = await state.get_data()
     lang = data.get('language', 'uk')
-    await state.update_data(model=message.text)
-    await message.answer(tr('multimedia_lang', lang))
-    await OrderState.multimedia_lang.set()
+    manual = "Інше" if lang == "uk" else "Другое"
+    if message.text not in [manual]:
+        await state.update_data(model=message.text)
+        await message.answer(tr('multimedia_lang', lang), reply_markup=types.ReplyKeyboardRemove())
+        await OrderState.multimedia_lang.set()
+    else:
+        await message.answer(tr('model_manual', lang), reply_markup=types.ReplyKeyboardRemove())
 
 @dp.message_handler(state=OrderState.multimedia_lang)
 async def set_multimedia_lang(message: types.Message, state: FSMContext):
