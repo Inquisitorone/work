@@ -1,4 +1,5 @@
 import os
+import re
 from aiogram import Bot, Dispatcher, types
 from aiogram.utils import executor
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
@@ -80,10 +81,6 @@ TEXTS = {
         "uk": "Введіть телефон менеджера:",
         "ru": "Введите телефон менеджера:"
     },
-    "share_phone_btn": {
-        "uk": "Поділитися номером",
-        "ru": "Поделиться номером"
-    },
     "summary_title": {
         "uk": "Перевірте дані:",
         "ru": "Проверьте данные:"
@@ -155,6 +152,14 @@ def get_cancel_kb(lang, extra_buttons=None):
         kb.add(*extra_buttons)
     kb.add(tr('cancel_form_btn', lang))
     return kb
+
+def is_valid_vin(vin):
+    vin = vin.strip().upper()
+    # VIN: 17 символов, только латинские буквы и цифры, без I, O, Q
+    return (
+        len(vin) == 17 and
+        re.fullmatch(r"[A-HJ-NPR-Z0-9]{17}", vin) is not None
+    )
 
 @dp.message_handler(commands=['start'], state='*')
 async def start_order(message: types.Message, state: FSMContext):
@@ -229,7 +234,14 @@ async def set_vin(message: types.Message, state: FSMContext):
         return
     data = await state.get_data()
     lang = data.get('language', 'uk')
-    await state.update_data(vin=message.text)
+    vin = message.text.strip().upper()
+    if not is_valid_vin(vin):
+        msg = "Некоректний VIN! Має бути 17 символів, лише латинські літери та цифри, без I, O, Q." \
+            if lang == "uk" else \
+            "Некорректный VIN! Должно быть 17 символов, только латинские буквы и цифры, без I, O, Q."
+        await message.answer(f"❗️ {msg}\n\n{tr('vin', lang)}", reply_markup=get_cancel_kb(lang))
+        return
+    await state.update_data(vin=vin)
     await message.answer("✅")
     dlink_kb = get_cancel_kb(lang, DLINKS[lang])
     await message.answer(tr('dlink', lang), reply_markup=dlink_kb)
@@ -284,21 +296,12 @@ async def set_multimedia_lang(message: types.Message, state: FSMContext):
     if message.text in MULTIMEDIA_LANGS[lang]:
         await state.update_data(multimedia_lang=message.text)
         await message.answer("✅")
-        # Кнопка для отправки контакта
-        phone_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        phone_kb.add(types.KeyboardButton(tr('share_phone_btn', lang), request_contact=True))
-        phone_kb.add(tr('cancel_form_btn', lang))
         await message.answer(tr('manager_name', lang), reply_markup=get_cancel_kb(lang))
-        await message.answer(tr('manager_phone', lang), reply_markup=phone_kb)
         await OrderState.manager_name.set()
     else:
         await state.update_data(multimedia_lang=message.text)
         await message.answer("✅")
-        phone_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        phone_kb.add(types.KeyboardButton(tr('share_phone_btn', lang), request_contact=True))
-        phone_kb.add(tr('cancel_form_btn', lang))
         await message.answer(tr('manager_name', lang), reply_markup=get_cancel_kb(lang))
-        await message.answer(tr('manager_phone', lang), reply_markup=phone_kb)
         await OrderState.manager_name.set()
 
 @dp.message_handler(state=OrderState.manager_name)
@@ -309,37 +312,10 @@ async def set_manager_name(message: types.Message, state: FSMContext):
     lang = data.get('language', 'uk')
     await state.update_data(manager_name=message.text)
     await message.answer("✅")
-    phone_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    phone_kb.add(types.KeyboardButton(tr('share_phone_btn', lang), request_contact=True))
-    phone_kb.add(tr('cancel_form_btn', lang))
-    await message.answer(tr('manager_phone', lang), reply_markup=phone_kb)
+    await message.answer(tr('manager_phone', lang), reply_markup=get_cancel_kb(lang))
     await OrderState.manager_phone.set()
 
-@dp.message_handler(content_types=types.ContentType.CONTACT, state=OrderState.manager_phone)
-async def handle_manager_phone_contact(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    lang = data.get('language', 'uk')
-    phone = message.contact.phone_number
-    await state.update_data(manager_phone=phone)
-    await message.answer("✅")
-    # Сразу итоговое резюме
-    data = await state.get_data()
-    summary = (
-        f"Мова: {data.get('language', '').upper() if lang == 'uk' else 'Язык: RUS'}\n"
-        f"{'Місто' if lang == 'uk' else 'Город'}: {data.get('city', '')}\n"
-        f"VIN: {data.get('vin', '')}\n"
-        f"Dlink: {data.get('dlink', '')}\n"
-        f"{'Модель' if lang == 'uk' else 'Модель'}: {data.get('model', '')}\n"
-        f"{'Мова мультимедіа' if lang == 'uk' else 'Язык мультимедиа'}: {data.get('multimedia_lang', '')}\n"
-        f"{'Менеджер' if lang == 'uk' else 'Менеджер'}: {data.get('manager_name', '')}\n"
-        f"{'Телефон' if lang == 'uk' else 'Телефон'}: {phone}"
-    )
-    confirm_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    confirm_kb.add(tr('confirm_btn', lang), tr('cancel_btn', lang))
-    await message.answer(f"{tr('summary_title', lang)}\n\n{summary}", reply_markup=confirm_kb)
-    await OrderState.confirm.set()
-
-@dp.message_handler(state=OrderState.manager_phone, content_types=types.ContentType.TEXT)
+@dp.message_handler(state=OrderState.manager_phone)
 async def set_manager_phone(message: types.Message, state: FSMContext):
     if message.text in ["Скасувати анкету", "Отменить анкету"]:
         return
