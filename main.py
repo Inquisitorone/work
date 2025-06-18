@@ -10,6 +10,9 @@ API_TOKEN = os.getenv("TELEGRAM_API_TOKEN")
 if not API_TOKEN:
     raise RuntimeError("Set TELEGRAM_API_TOKEN")
 
+# Список Telegram user_id для админ-уведомлений:
+ADMIN_USER_IDS = [6418780785, 1234567890]  # ← здесь добавляй любые id через запятую
+
 bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
@@ -363,7 +366,28 @@ async def confirm_order(message: types.Message, state: FSMContext):
     new_order_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     new_order_kb.add(tr('new_order_btn', lang))
     await message.answer(tr('order_accepted', lang), reply_markup=new_order_kb)
+    await send_admin_order(message.from_user, data)
     await state.reset_state(with_data=False)
+
+async def send_admin_order(user, data):
+    lang = data.get('language', 'uk')
+    username = user.username or ("Новий користувач" if lang == "uk" else "Новый пользователь")
+    summary = (
+        f"Нова заявка від @{username}\n"
+        f"Мова: {data.get('language', '').upper() if lang == 'uk' else 'Язык: RUS'}\n"
+        f"{'Місто' if lang == 'uk' else 'Город'}: {data.get('city', '')}\n"
+        f"VIN: {data.get('vin', '')}\n"
+        f"Dlink: {data.get('dlink', '')}\n"
+        f"{'Модель' if lang == 'uk' else 'Модель'}: {data.get('model', '')}\n"
+        f"{'Мова мультимедіа' if lang == 'uk' else 'Язык мультимедиа'}: {data.get('multimedia_lang', '')}\n"
+        f"{'Менеджер' if lang == 'uk' else 'Менеджер'}: {data.get('manager_name', '')}\n"
+        f"{'Телефон' if lang == 'uk' else 'Телефон'}: {data.get('manager_phone', '')}"
+    )
+    for admin_id in ADMIN_USER_IDS:
+        try:
+            await bot.send_message(admin_id, summary)
+        except Exception as e:
+            print(f"Ошибка при отправке админ-уведомления: {e}")
 
 @dp.message_handler(lambda m: m.text in ["Змінити дані", "Изменить данные"], state=OrderState.confirm)
 async def edit_data(message: types.Message, state: FSMContext):
