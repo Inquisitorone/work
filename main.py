@@ -18,6 +18,7 @@ dp = Dispatcher(bot, storage=storage)
 
 class OrderState(StatesGroup):
     language = State()
+    brand = State()
     city = State()
     service_type = State()
     vin = State()
@@ -47,6 +48,10 @@ TEXTS = {
     "choose_lang": {
         "uk": "Оберіть мову:",
         "ru": "Выберите язык:"
+    },
+    "choose_brand": {
+        "uk": "Оберіть бренд:",
+        "ru": "Выберите бренд:"
     },
     "city": {
         "uk": "Оберіть місто:",
@@ -150,6 +155,11 @@ CITIES = {
     ]
 }
 
+BRANDS = {
+    "uk": ["BYD", "Zeekr"],
+    "ru": ["BYD", "Zeekr"]
+}
+
 DLINKS = {
     "uk": ["Dlink 3 🔌", "Dlink 4 ⚡️", "Dlink 5 🔋", "Інше"],
     "ru": ["Dlink 3 🔌", "Dlink 4 ⚡️", "Dlink 5 🔋", "Другое"]
@@ -207,11 +217,9 @@ async def start_order(message: types.Message, state: FSMContext):
     lang = data.get('language')
     if lang:
         await message.answer(INSTRUCTION[lang])
-        city_kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-        city_kb.add(*CITIES[lang])
-        city_kb.add(tr('cancel_form_btn', lang))
-        await message.answer(tr("city", lang), reply_markup=city_kb)
-        await OrderState.city.set()
+        new_order_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        new_order_kb.add(tr('new_order_btn', lang))
+        await message.answer("Для початку виберіть замовлення.", reply_markup=new_order_kb)
     else:
         kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
         kb.add("🇺🇦 Українська", "🇷🇺 Русский")
@@ -233,11 +241,9 @@ async def set_language(message: types.Message, state: FSMContext):
     await state.update_data(language=lang)
     await message.answer("✅")
     await message.answer(INSTRUCTION[lang])
-    city_kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    city_kb.add(*CITIES[lang])
-    city_kb.add(tr('cancel_form_btn', lang))
-    await message.answer(tr("city", lang), reply_markup=city_kb)
-    await OrderState.city.set()
+    new_order_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    new_order_kb.add(tr('new_order_btn', lang))
+    await message.answer("Для початку виберіть замовлення.", reply_markup=new_order_kb)
 
 @dp.message_handler(lambda m: m.text in ["Скасувати анкету", "Отменить анкету"], state='*')
 async def cancel_form(message: types.Message, state: FSMContext):
@@ -247,6 +253,37 @@ async def cancel_form(message: types.Message, state: FSMContext):
     start_kb.add(tr('new_order_btn', lang))
     await state.finish()
     await message.answer("Анкету скасовано.\nМожете розпочати нову заявку.", reply_markup=start_kb)
+
+@dp.message_handler(lambda m: m.text in ["Нове замовлення 📝", "Новый заказ 📝"], state='*')
+async def new_order_button(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get('language', 'uk')
+    brands_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    brands_kb.add(*BRANDS[lang])
+    brands_kb.add(tr('cancel_form_btn', lang))
+    await message.answer(tr('choose_brand', lang), reply_markup=brands_kb)
+    await OrderState.brand.set()
+
+@dp.message_handler(state=OrderState.brand)
+async def set_brand(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get('language', 'uk')
+    if message.text == "BYD":
+        await state.update_data(brand="BYD")
+        city_kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+        city_kb.add(*CITIES[lang])
+        city_kb.add(tr('cancel_form_btn', lang))
+        await message.answer(tr("city", lang), reply_markup=city_kb)
+        await OrderState.city.set()
+    elif message.text == "Zeekr":
+        await state.update_data(brand="Zeekr")
+        await message.answer("Логіка для Zeekr буде додана пізніше. Поки що зверніться до менеджера 🚗", reply_markup=get_cancel_kb(lang))
+        await state.finish()
+    else:
+        brands_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        brands_kb.add(*BRANDS[lang])
+        brands_kb.add(tr('cancel_form_btn', lang))
+        await message.answer(tr('choose_brand', lang), reply_markup=brands_kb)
 
 @dp.message_handler(state=OrderState.city)
 async def set_city(message: types.Message, state: FSMContext):
@@ -383,6 +420,7 @@ async def set_manager_phone(message: types.Message, state: FSMContext):
     data = await state.get_data()
     summary = (
         f"{'Мова' if lang == 'uk' else 'Язык'}: {display_user_language(data.get('language', ''))}\n"
+        f"{'Бренд' if lang == 'uk' else 'Бренд'}: {data.get('brand', '')}\n"
         f"{'Місто' if lang == 'uk' else 'Город'}: {data.get('city', '')}\n"
         f"{'Тип послуги' if lang == 'uk' else 'Тип услуги'}: {data.get('service_type', '')}\n"
         f"VIN: {data.get('vin', '')}\n"
@@ -413,6 +451,7 @@ async def send_admin_order(user, data):
     summary = (
         f"Нова заявка від @{username}\n"
         f"{'Мова' if lang == 'uk' else 'Язык'}: {display_user_language(data.get('language', ''))}\n"
+        f"{'Бренд' if lang == 'uk' else 'Бренд'}: {data.get('brand', '')}\n"
         f"{'Місто' if lang == 'uk' else 'Город'}: {data.get('city', '')}\n"
         f"{'Тип послуги' if lang == 'uk' else 'Тип услуги'}: {data.get('service_type', '')}\n"
         f"VIN: {data.get('vin', '')}\n"
@@ -470,17 +509,6 @@ async def cancel_order(message: types.Message, state: FSMContext):
     new_order_kb.add(tr('new_order_btn', lang))
     await message.answer(tr('operation_canceled', lang), reply_markup=new_order_kb)
     await state.reset_state(with_data=False)
-
-@dp.message_handler(lambda m: m.text in ["Нове замовлення 📝", "Новый заказ 📝"], state='*')
-async def new_order_button(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    lang = data.get('language', 'uk')
-    await message.answer(INSTRUCTION[lang])
-    city_kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    city_kb.add(*CITIES[lang])
-    city_kb.add(tr('cancel_form_btn', lang))
-    await message.answer(tr("city", lang), reply_markup=city_kb)
-    await OrderState.city.set()
 
 @dp.message_handler(state=None)
 async def echo(message: types.Message, state: FSMContext):
