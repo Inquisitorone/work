@@ -21,6 +21,8 @@ class OrderState(StatesGroup):
     brand = State()
     city = State()
     service_type = State()
+    service_price = State()         # ← новое состояние для суммы услуги
+    service_payment = State()       # ← новое состояние для оплаты
     vin = State()
     dlink = State()
     model = State()
@@ -115,10 +117,10 @@ TEXTS = {
     },
     "fields": {
         "uk": [
-            "Місто", "Тип послуги", "VIN", "Dlink", "Модель", "Мова мультимедіа", "Ім'я менеджера", "Телефон менеджера"
+            "Місто", "Тип послуги", "Вартість послуги", "Спосіб оплати", "VIN", "Dlink", "Модель", "Мова мультимедіа", "Ім'я менеджера", "Телефон менеджера"
         ],
         "ru": [
-            "Город", "Тип услуги", "VIN", "Dlink", "Модель", "Язык мультимедиа", "Имя менеджера", "Телефон менеджера"
+            "Город", "Тип услуги", "Стоимость услуги", "Способ оплаты", "VIN", "Dlink", "Модель", "Язык мультимедиа", "Имя менеджера", "Телефон менеджера"
         ]
     },
     "cancel_btn": {
@@ -316,10 +318,48 @@ async def set_service_type(message: types.Message, state: FSMContext):
     if message.text in TEXTS["service_types"][lang]:
         await state.update_data(service_type=message.text)
         await message.answer("✅")
-        await message.answer(tr('vin', lang), reply_markup=get_cancel_kb(lang))
-        await OrderState.vin.set()
+        price_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        price_kb.add(tr('cancel_form_btn', lang))
+        await message.answer("Введіть суму вартості послуги:", reply_markup=price_kb)
+        await OrderState.service_price.set()
     else:
         await message.answer(tr('service_type', lang), reply_markup=get_cancel_kb(lang, TEXTS["service_types"][lang]))
+
+@dp.message_handler(state=OrderState.service_price)
+async def set_service_price(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get('language', 'uk')
+    if message.text in ["Скасувати анкету", "Отменить анкету"]:
+        return
+    price = message.text.strip()
+    if not price:
+        await message.answer("Введіть коректну суму:", reply_markup=get_cancel_kb(lang))
+        return
+    await state.update_data(service_price=price)
+    pay_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    pay_kb.add("Оплата Салон", "Оплата СТО")
+    pay_kb.add(tr('cancel_form_btn', lang))
+    await message.answer("Оберіть спосіб оплати:", reply_markup=pay_kb)
+    await OrderState.service_payment.set()
+
+@dp.message_handler(state=OrderState.service_payment)
+async def set_service_payment(message: types.Message, state: FSMContext):
+    if message.text in ["Оплата Салон", "Оплата СТО"]:
+        await state.update_data(service_payment=message.text)
+        data = await state.get_data()
+        lang = data.get('language', 'uk')
+        await message.answer("✅")
+        await message.answer(tr('vin', lang), reply_markup=get_cancel_kb(lang))
+        await OrderState.vin.set()
+    elif message.text in ["Скасувати анкету", "Отменить анкету"]:
+        return
+    else:
+        pay_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        pay_kb.add("Оплата Салон", "Оплата СТО")
+        data = await state.get_data()
+        lang = data.get('language', 'uk')
+        pay_kb.add(tr('cancel_form_btn', lang))
+        await message.answer("Оберіть спосіб оплати:", reply_markup=pay_kb)
 
 @dp.message_handler(state=OrderState.vin)
 async def set_vin(message: types.Message, state: FSMContext):
@@ -416,13 +456,15 @@ async def set_manager_phone(message: types.Message, state: FSMContext):
     lang = data.get('language', 'uk')
     await state.update_data(manager_phone=message.text)
     await message.answer("✅")
-    # Сразу итоговое резюме
+    # Итоговое резюме
     data = await state.get_data()
     summary = (
         f"{'Мова' if lang == 'uk' else 'Язык'}: {display_user_language(data.get('language', ''))}\n"
         f"{'Бренд' if lang == 'uk' else 'Бренд'}: {data.get('brand', '')}\n"
         f"{'Місто' if lang == 'uk' else 'Город'}: {data.get('city', '')}\n"
         f"{'Тип послуги' if lang == 'uk' else 'Тип услуги'}: {data.get('service_type', '')}\n"
+        f"{'Вартість послуги' if lang == 'uk' else 'Стоимость услуги'}: {data.get('service_price', '')}\n"
+        f"{'Спосіб оплати' if lang == 'uk' else 'Способ оплаты'}: {data.get('service_payment', '')}\n"
         f"VIN: {data.get('vin', '')}\n"
         f"Dlink: {data.get('dlink', '')}\n"
         f"{'Модель' if lang == 'uk' else 'Модель'}: {data.get('model', '')}\n"
@@ -454,6 +496,8 @@ async def send_admin_order(user, data):
         f"{'Бренд' if lang == 'uk' else 'Бренд'}: {data.get('brand', '')}\n"
         f"{'Місто' if lang == 'uk' else 'Город'}: {data.get('city', '')}\n"
         f"{'Тип послуги' if lang == 'uk' else 'Тип услуги'}: {data.get('service_type', '')}\n"
+        f"{'Вартість послуги' if lang == 'uk' else 'Стоимость услуги'}: {data.get('service_price', '')}\n"
+        f"{'Спосіб оплати' if lang == 'uk' else 'Способ оплаты'}: {data.get('service_payment', '')}\n"
         f"VIN: {data.get('vin', '')}\n"
         f"Dlink: {data.get('dlink', '')}\n"
         f"{'Модель' if lang == 'uk' else 'Модель'}: {data.get('model', '')}\n"
@@ -484,6 +528,8 @@ async def choose_field_to_edit(message: types.Message, state: FSMContext):
     field_map = {
         ("Місто", "Город"): OrderState.city,
         ("Тип послуги", "Тип услуги"): OrderState.service_type,
+        ("Вартість послуги", "Стоимость услуги"): OrderState.service_price,
+        ("Спосіб оплати", "Способ оплаты"): OrderState.service_payment,
         ("VIN",): OrderState.vin,
         ("Dlink",): OrderState.dlink,
         ("Модель",): OrderState.model,
