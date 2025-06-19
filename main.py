@@ -96,8 +96,8 @@ TEXTS = {
         "ru": "Введите имя менеджера:"
     },
     "manager_phone": {
-        "uk": "Введіть телефон менеджера:",
-        "ru": "Введите телефон менеджера:"
+        "uk": "Введіть телефон менеджера або поділіться контактом:",
+        "ru": "Введите телефон менеджера или поделитесь контактом:"
     },
     "summary_title": {
         "uk": "Перевірте дані:",
@@ -244,7 +244,6 @@ async def set_language(message: types.Message, state: FSMContext):
     await message.answer("✅")
     await message.answer(INSTRUCTION[lang])
 
-    # СРАЗУ показываем кнопки брендов!
     brands_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     brands_kb.add(*BRANDS[lang])
     brands_kb.add(tr('cancel_form_btn', lang))
@@ -449,16 +448,22 @@ async def set_manager_name(message: types.Message, state: FSMContext):
     lang = data.get('language', 'uk')
     await state.update_data(manager_name=message.text)
     await message.answer("✅")
-    await message.answer(tr('manager_phone', lang), reply_markup=get_cancel_kb(lang))
+
+    # Кнопка поделиться контактом + кнопка ручного ввода
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add(types.KeyboardButton("📱 Поділитися телефоном", request_contact=True))
+    kb.add("Ввести вручну", tr('cancel_form_btn', lang))
+    await message.answer(tr('manager_phone', lang), reply_markup=kb)
     await OrderState.manager_phone.set()
 
-@dp.message_handler(state=OrderState.manager_phone)
-async def set_manager_phone(message: types.Message, state: FSMContext):
-    if message.text in ["Скасувати анкету", "Отменить анкету"]:
+@dp.message_handler(state=OrderState.manager_phone, content_types=types.ContentTypes.CONTACT)
+async def set_manager_phone_contact(message: types.Message, state: FSMContext):
+    if not message.contact or not message.contact.phone_number:
+        await message.answer("Не вдалося отримати номер телефону. Спробуйте ще раз.")
         return
+    await state.update_data(manager_phone=message.contact.phone_number)
     data = await state.get_data()
     lang = data.get('language', 'uk')
-    await state.update_data(manager_phone=message.text)
     await message.answer("✅")
     # Итоговое резюме
     data = await state.get_data()
@@ -474,7 +479,40 @@ async def set_manager_phone(message: types.Message, state: FSMContext):
         f"{'Модель' if lang == 'uk' else 'Модель'}: {data.get('model', '')}\n"
         f"{'Мова мультимедіа' if lang == 'uk' else 'Язык мультимедиа'}: {display_multimedia_lang(data.get('multimedia_lang', ''), lang)}\n"
         f"{'Менеджер' if lang == 'uk' else 'Менеджер'}: {data.get('manager_name', '')}\n"
-        f"{'Телефон' if lang == 'uk' else 'Телефон'}: {message.text}"
+        f"{'Телефон' if lang == 'uk' else 'Телефон'}: {data.get('manager_phone', '')}"
+    )
+    confirm_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    confirm_kb.add(tr('confirm_btn', lang), tr('edit_btn', lang), tr('cancel_btn', lang))
+    await message.answer(f"{tr('summary_title', lang)}\n\n{summary}", reply_markup=confirm_kb)
+    await OrderState.confirm.set()
+
+@dp.message_handler(state=OrderState.manager_phone)
+async def set_manager_phone_manual(message: types.Message, state: FSMContext):
+    if message.text in ["Ввести вручну"]:
+        lang = (await state.get_data()).get('language', 'uk')
+        await message.answer("Введіть телефон вручну:", reply_markup=get_cancel_kb(lang))
+        return
+    if message.text in ["Скасувати анкету", "Отменить анкету"]:
+        return
+    await state.update_data(manager_phone=message.text)
+    data = await state.get_data()
+    lang = data.get('language', 'uk')
+    await message.answer("✅")
+    # Итоговое резюме
+    data = await state.get_data()
+    summary = (
+        f"{'Мова' if lang == 'uk' else 'Язык'}: {display_user_language(data.get('language', ''))}\n"
+        f"{'Бренд' if lang == 'uk' else 'Бренд'}: {data.get('brand', '')}\n"
+        f"{'Місто' if lang == 'uk' else 'Город'}: {data.get('city', '')}\n"
+        f"{'Тип послуги' if lang == 'uk' else 'Тип услуги'}: {data.get('service_type', '')}\n"
+        f"{'Вартість послуги' if lang == 'uk' else 'Стоимость услуги'}: {data.get('service_price', '')}\n"
+        f"{'Спосіб оплати' if lang == 'uk' else 'Способ оплаты'}: {data.get('service_payment', '')}\n"
+        f"VIN: {data.get('vin', '')}\n"
+        f"Dlink: {data.get('dlink', '')}\n"
+        f"{'Модель' if lang == 'uk' else 'Модель'}: {data.get('model', '')}\n"
+        f"{'Мова мультимедіа' if lang == 'uk' else 'Язык мультимедиа'}: {display_multimedia_lang(data.get('multimedia_lang', ''), lang)}\n"
+        f"{'Менеджер' if lang == 'uk' else 'Менеджер'}: {data.get('manager_name', '')}\n"
+        f"{'Телефон' if lang == 'uk' else 'Телефон'}: {data.get('manager_phone', '')}"
     )
     confirm_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     confirm_kb.add(tr('confirm_btn', lang), tr('edit_btn', lang), tr('cancel_btn', lang))
