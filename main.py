@@ -142,13 +142,6 @@ ZEEKR_MODELS = [
 def tr(key, lang):
     return TEXTS.get(key, {}).get(lang, key)
 
-def get_cancel_kb(lang, extra_buttons=None):
-    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    if extra_buttons:
-        kb.add(*extra_buttons)
-    kb.add(tr('cancel_form_btn', lang))
-    return kb
-
 def is_valid_vin(vin):
     vin = vin.strip().upper()
     return (
@@ -318,11 +311,12 @@ async def set_vin(message: types.Message, state: FSMContext):
 # Dlink (только BYD)
 @dp.message_handler(state=OrderState.dlink)
 async def set_dlink(message: types.Message, state: FSMContext):
-    dlink_choice = message.text.split()[0]  # Dlink 3/4/5 или Інше
+    dlink_choice = message.text.strip()  # сохраняем с эмодзи!
     await state.update_data(dlink=dlink_choice)
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    if dlink_choice in DLINK_MODELS:
-        kb.add(*DLINK_MODELS[dlink_choice])
+    dlink_key = dlink_choice.split()[0] + " " + dlink_choice.split()[1] if dlink_choice.startswith("Dlink") else dlink_choice
+    if dlink_key in DLINK_MODELS:
+        kb.add(*DLINK_MODELS[dlink_key])
     await message.answer(tr('model', (await state.get_data()).get('language', 'uk')), reply_markup=kb)
     await OrderState.model.set()
 
