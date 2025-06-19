@@ -409,7 +409,9 @@ async def send_summary(message, state):
 @dp.message_handler(lambda m: m.text in ["Підтвердити", "Подтвердить"], state=OrderState.confirm)
 async def confirm_order(message: types.Message, state: FSMContext):
     lang = (await state.get_data()).get('language', 'uk')
-    await message.answer(tr('order_accepted', lang), reply_markup=types.ReplyKeyboardRemove())
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add(tr('new_order_btn', lang))
+    await message.answer(tr('order_accepted', lang), reply_markup=kb)
     data = await state.get_data()
     await send_admin_order(message.from_user, data)
     await state.finish()
