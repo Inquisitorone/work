@@ -1,10 +1,17 @@
 import os
 import re
+import logging
 from aiogram import Bot, Dispatcher, types
 from aiogram.utils import executor
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
+
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from datetime import datetime
+
+logging.basicConfig(level=logging.INFO)
 
 API_TOKEN = os.getenv("TELEGRAM_API_TOKEN")
 if not API_TOKEN:
@@ -162,6 +169,37 @@ def display_multimedia_lang(value, lang):
     if value.lower().startswith("рос") or value.lower().startswith("рус"):
         return "Російська" if lang == "uk" else "Русский"
     return value
+
+def append_to_gsheet(data):
+    logging.warning("append_to_gsheet STARTED!")
+    try:
+        scope = [
+            'https://spreadsheets.google.com/feeds',
+            'https://www.googleapis.com/auth/drive'
+        ]
+        creds = ServiceAccountCredentials.from_json_keyfile_name('google-credentials.json', scope)
+        client = gspread.authorize(creds)
+        sheet = client.open("Заявки АвтоБота").sheet1  # <-- Имя таблицы!
+
+        row = [
+            datetime.now().strftime("%Y-%m-%d %H:%M"),
+            data.get('username', ''),
+            data.get('brand', ''),
+            data.get('city', ''),
+            data.get('service_type', ''),
+            data.get('service_price', ''),
+            data.get('service_payment', ''),
+            data.get('vin', ''),
+            data.get('dlink', ''),
+            data.get('model', ''),
+            data.get('multimedia_lang', ''),
+            data.get('manager_name', ''),
+            data.get('manager_phone', ''),
+        ]
+        sheet.append_row(row, value_input_option='USER_ENTERED')
+        logging.warning("append_to_gsheet FINISHED!")
+    except Exception as e:
+        logging.error(f"append_to_gsheet ERROR: {e}")
 
 # /start и выбор языка
 @dp.message_handler(commands=['start'], state='*')
@@ -407,6 +445,8 @@ async def confirm_order(message: types.Message, state: FSMContext):
     kb.add(tr('new_order_btn', lang))
     await message.answer(tr('order_accepted', lang), reply_markup=kb)
     data = await state.get_data()
+    data['username'] = message.from_user.username or ""
+    append_to_gsheet(data)  # <<--- тут всё пишется в таблицу
     await send_admin_order(message.from_user, data)
     await state.finish()
 
