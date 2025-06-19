@@ -31,14 +31,154 @@ class OrderState(StatesGroup):
     manager_phone = State()
     confirm = State()
 
-# ... (INSTRUCTION, TEXTS, tr, CITIES, BRANDS, DLINKS, DLINK_MODELS, MULTIMEDIA_LANGS, display_user_language, display_multimedia_lang, get_cancel_kb, is_valid_vin - см. выше, оставь как было) ...
+TEXTS = {
+    "choose_lang": {
+        "uk": "Оберіть мову:",
+        "ru": "Выберите язык:"
+    },
+    "choose_brand": {
+        "uk": "Оберіть бренд:",
+        "ru": "Выберите бренд:"
+    },
+    "city": {
+        "uk": "Оберіть місто:",
+        "ru": "Выберите город:"
+    },
+    "city_manual": {
+        "uk": "Введіть місто вручну:",
+        "ru": "Введите город вручную:"
+    },
+    "service_type": {
+        "uk": "Послуга віддалена чи фактична на СТО?",
+        "ru": "Услуга удалённая или фактическая на СТО?"
+    },
+    "service_types": {
+        "uk": ["Віддалена 🏠", "Фактична на СТО 🏢"],
+        "ru": ["Удалённая 🏠", "Фактическая на СТО 🏢"]
+    },
+    "vin": {
+        "uk": "Введіть VIN:",
+        "ru": "Введите VIN:"
+    },
+    "dlink": {
+        "uk": "Оберіть Dlink:",
+        "ru": "Выберите Dlink:"
+    },
+    "model": {
+        "uk": "Оберіть модель:",
+        "ru": "Выберите модель:"
+    },
+    "multimedia_lang": {
+        "uk": "Оберіть мову мультимедіа:",
+        "ru": "Выберите язык мультимедиа:"
+    },
+    "manager_name": {
+        "uk": "Введіть ім'я менеджера:",
+        "ru": "Введите имя менеджера:"
+    },
+    "manager_phone": {
+        "uk": "Введіть телефон менеджера або поділіться контактом:",
+        "ru": "Введите телефон менеджера или поделитесь контактом:"
+    },
+    "summary_title": {
+        "uk": "Перевірте дані:",
+        "ru": "Проверьте данные:"
+    },
+    "confirm_btn": {
+        "uk": "Підтвердити",
+        "ru": "Подтвердить"
+    },
+    "order_accepted": {
+        "uk": "Замовлення прийняте! Дякую! ✅",
+        "ru": "Заказ принят! Спасибо! ✅"
+    },
+    "new_order_btn": {
+        "uk": "Нове замовлення 📝",
+        "ru": "Новый заказ 📝"
+    },
+    "cancel_form_btn": {
+        "uk": "Скасувати анкету",
+        "ru": "Отменить анкету"
+    }
+}
 
+CITIES = {
+    "uk": ["Київ", "Львів", "Одеса", "Харків", "Вінниця", "Дніпро", "Ужгород", "Інше"],
+    "ru": ["Киев", "Львов", "Одесса", "Харьков", "Винница", "Днепр", "Ужгород", "Другое"]
+}
+
+BRANDS = {
+    "uk": ["BYD", "Zeekr"],
+    "ru": ["BYD", "Zeekr"]
+}
+
+DLINKS = {
+    "uk": ["Dlink 3 🔌", "Dlink 4 ⚡️", "Dlink 5 🔋", "Інше"],
+    "ru": ["Dlink 3 🔌", "Dlink 4 ⚡️", "Dlink 5 🔋", "Другое"]
+}
+
+DLINK_MODELS = {
+    "Dlink 3": [
+        "Qin Plus", "DM-i", "EV", "Song Pro", "Yuan Plus", "Song Max",
+        "Destroyer 05", "Dolphins", "Tang Dm-i", "Інше", "Другое"
+    ],
+    "Dlink 4": [
+        "Han 22", "Tang 22", "Song Plus", "Song Champ", "Frigate 07", "Seal EV", "Інше", "Другое"
+    ],
+    "Dlink 5": [
+        "Song Plus", "Song L", "Song L DMI", "Seal", "Sealion 07", "Інше", "Другое"
+    ]
+}
+
+MULTIMEDIA_LANGS = {
+    "uk": ["Українська", "Російська"],
+    "ru": ["Украинский", "Русский"]
+}
+
+ZEEKR_MODELS = [
+    "001", "7X", "X", "007", "Інше", "Другое"
+]
+
+def tr(key, lang):
+    return TEXTS.get(key, {}).get(lang, key)
+
+def get_cancel_kb(lang, extra_buttons=None):
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    if extra_buttons:
+        kb.add(*extra_buttons)
+    kb.add(tr('cancel_form_btn', lang))
+    return kb
+
+def is_valid_vin(vin):
+    vin = vin.strip().upper()
+    return (
+        len(vin) == 17 and
+        re.fullmatch(r"[A-HJ-NPR-Z0-9]{17}", vin) is not None
+    )
+
+def display_user_language(code):
+    if code == "uk":
+        return "УКРАЇНСЬКА"
+    if code == "ru":
+        return "РУССКИЙ"
+    return code.upper()
+
+def display_multimedia_lang(value, lang):
+    if value.lower().startswith("укр"):
+        return "Українська" if lang == "uk" else "Украинский"
+    if value.lower().startswith("рос") or value.lower().startswith("рус"):
+        return "Російська" if lang == "uk" else "Русский"
+    return value
+
+# /start и выбор языка
 @dp.message_handler(commands=['start'], state='*')
 async def start_order(message: types.Message, state: FSMContext):
     data = await state.get_data()
     lang = data.get('language')
     if lang:
-        await message.answer("Для початку виберіть замовлення.", reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add(TEXTS['new_order_btn'][lang]))
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        kb.add(tr('new_order_btn', lang))
+        await message.answer("Для початку виберіть замовлення.", reply_markup=kb)
     else:
         kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
         kb.add("🇺🇦 Українська", "🇷🇺 Русский")
@@ -61,17 +201,25 @@ async def set_language(message: types.Message, state: FSMContext):
     brands_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     brands_kb.add(*BRANDS[lang])
     await message.answer("✅", reply_markup=types.ReplyKeyboardRemove())
-    await message.answer(TEXTS['choose_brand'][lang], reply_markup=brands_kb)
+    await message.answer(tr('choose_brand', lang), reply_markup=brands_kb)
     await OrderState.brand.set()
 
 @dp.message_handler(lambda m: m.text in ["Нове замовлення 📝", "Новый заказ 📝"], state='*')
 async def new_order_button(message: types.Message, state: FSMContext):
-    lang = (await state.get_data()).get('language', 'uk')
+    data = await state.get_data()
+    lang = data.get('language')
+    if not lang:
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        kb.add("🇺🇦 Українська", "🇷🇺 Русский")
+        await message.answer("Оберіть мову / Выберите язык:", reply_markup=kb)
+        await OrderState.language.set()
+        return
     brands_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     brands_kb.add(*BRANDS[lang])
-    await message.answer(TEXTS['choose_brand'][lang], reply_markup=brands_kb)
+    await message.answer(tr('choose_brand', lang), reply_markup=brands_kb)
     await OrderState.brand.set()
 
+# Выбор бренда (BYD или Zeekr)
 @dp.message_handler(state=OrderState.brand)
 async def set_brand(message: types.Message, state: FSMContext):
     lang = (await state.get_data()).get('language', 'uk')
@@ -79,28 +227,30 @@ async def set_brand(message: types.Message, state: FSMContext):
         await state.update_data(brand="BYD")
         city_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
         city_kb.add(*CITIES[lang])
-        await message.answer(TEXTS['city'][lang], reply_markup=city_kb)
+        await message.answer(tr('city', lang), reply_markup=city_kb)
+        await OrderState.city.set()
+    elif message.text == "Zeekr":
+        await state.update_data(brand="Zeekr")
+        city_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        city_kb.add(*CITIES[lang])
+        await message.answer(tr('city', lang), reply_markup=city_kb)
         await OrderState.city.set()
     else:
-        # ... обработка Zeekr или др. брендов ...
-        pass
+        brands_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        brands_kb.add(*BRANDS[lang])
+        await message.answer(tr('choose_brand', lang), reply_markup=brands_kb)
 
+# Город
 @dp.message_handler(state=OrderState.city)
 async def set_city(message: types.Message, state: FSMContext):
     lang = (await state.get_data()).get('language', 'uk')
-    if message.text in CITIES[lang]:
-        await state.update_data(city=message.text)
-        kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        kb.add(*TEXTS['service_types'][lang])
-        await message.answer(TEXTS['service_type'][lang], reply_markup=kb)
-        await OrderState.service_type.set()
-    else:
-        await state.update_data(city=message.text)
-        kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        kb.add(*TEXTS['service_types'][lang])
-        await message.answer(TEXTS['service_type'][lang], reply_markup=kb)
-        await OrderState.service_type.set()
+    await state.update_data(city=message.text)
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add(*TEXTS['service_types'][lang])
+    await message.answer(tr('service_type', lang), reply_markup=kb)
+    await OrderState.service_type.set()
 
+# Тип услуги
 @dp.message_handler(state=OrderState.service_type)
 async def set_service_type(message: types.Message, state: FSMContext):
     lang = (await state.get_data()).get('language', 'uk')
@@ -112,14 +262,14 @@ async def set_service_type(message: types.Message, state: FSMContext):
     if match:
         await state.update_data(service_type=match)
         await message.answer("✅")
-        kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        await message.answer("Введіть суму вартості послуги:", reply_markup=kb)
+        await message.answer("Введіть суму вартості послуги:")
         await OrderState.service_price.set()
     else:
         kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
         kb.add(*TEXTS['service_types'][lang])
-        await message.answer(TEXTS['service_type'][lang], reply_markup=kb)
+        await message.answer(tr('service_type', lang), reply_markup=kb)
 
+# Сумма услуги
 @dp.message_handler(state=OrderState.service_price)
 async def set_service_price(message: types.Message, state: FSMContext):
     lang = (await state.get_data()).get('language', 'uk')
@@ -133,6 +283,7 @@ async def set_service_price(message: types.Message, state: FSMContext):
     await message.answer("Оберіть спосіб оплати:", reply_markup=kb)
     await OrderState.service_payment.set()
 
+# Оплата
 @dp.message_handler(state=OrderState.service_payment)
 async def set_service_payment(message: types.Message, state: FSMContext):
     if message.text not in ["Оплата Салон", "Оплата СТО"]:
@@ -140,9 +291,10 @@ async def set_service_payment(message: types.Message, state: FSMContext):
         return
     await state.update_data(service_payment=message.text)
     lang = (await state.get_data()).get('language', 'uk')
-    await message.answer("Введіть VIN:", reply_markup=types.ReplyKeyboardRemove())
+    await message.answer(tr('vin', lang), reply_markup=types.ReplyKeyboardRemove())
     await OrderState.vin.set()
 
+# VIN
 @dp.message_handler(state=OrderState.vin)
 async def set_vin(message: types.Message, state: FSMContext):
     vin = message.text.strip().upper()
@@ -151,52 +303,62 @@ async def set_vin(message: types.Message, state: FSMContext):
         return
     await state.update_data(vin=vin)
     lang = (await state.get_data()).get('language', 'uk')
-    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add(*DLINKS[lang])
-    await message.answer("Оберіть Dlink:", reply_markup=kb)
-    await OrderState.dlink.set()
+    brand = (await state.get_data()).get('brand', 'BYD')
+    if brand == "BYD":
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        kb.add(*DLINKS[lang])
+        await message.answer(tr('dlink', lang), reply_markup=kb)
+        await OrderState.dlink.set()
+    else:
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        kb.add(*ZEEKR_MODELS)
+        await message.answer("Оберіть модель Zeekr:", reply_markup=kb)
+        await OrderState.model.set()
 
+# Dlink (только BYD)
 @dp.message_handler(state=OrderState.dlink)
 async def set_dlink(message: types.Message, state: FSMContext):
-    dlink_choice = message.text.split()[0]  # Dlink 3/4/5 или Инше
+    dlink_choice = message.text.split()[0]  # Dlink 3/4/5 или Інше
     await state.update_data(dlink=dlink_choice)
-    # Выбор моделей по Dlink
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     if dlink_choice in DLINK_MODELS:
         kb.add(*DLINK_MODELS[dlink_choice])
-    await message.answer("Оберіть модель:", reply_markup=kb)
+    await message.answer(tr('model', (await state.get_data()).get('language', 'uk')), reply_markup=kb)
     await OrderState.model.set()
 
+# Модель (и BYD и Zeekr)
 @dp.message_handler(state=OrderState.model)
 async def set_model(message: types.Message, state: FSMContext):
     await state.update_data(model=message.text)
     lang = (await state.get_data()).get('language', 'uk')
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add(*MULTIMEDIA_LANGS[lang])
-    await message.answer("Оберіть мову мультимедіа:", reply_markup=kb)
+    await message.answer(tr('multimedia_lang', lang), reply_markup=kb)
     await OrderState.multimedia_lang.set()
 
+# Язык мультимедиа
 @dp.message_handler(state=OrderState.multimedia_lang)
 async def set_multimedia_lang(message: types.Message, state: FSMContext):
     await state.update_data(multimedia_lang=message.text)
     lang = (await state.get_data()).get('language', 'uk')
-    await message.answer("Введіть ім'я менеджера:", reply_markup=types.ReplyKeyboardRemove())
+    await message.answer(tr('manager_name', lang), reply_markup=types.ReplyKeyboardRemove())
     await OrderState.manager_name.set()
 
+# Менеджер
 @dp.message_handler(state=OrderState.manager_name)
 async def set_manager_name(message: types.Message, state: FSMContext):
     await state.update_data(manager_name=message.text)
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add(types.KeyboardButton("📱 Поділитися телефоном", request_contact=True))
     kb.add("Ввести вручну")
-    await message.answer("Введіть телефон менеджера або поділіться контактом:", reply_markup=kb)
+    await message.answer(tr('manager_phone', (await state.get_data()).get('language', 'uk')), reply_markup=kb)
     await OrderState.manager_phone.set()
 
 @dp.message_handler(state=OrderState.manager_phone, content_types=types.ContentTypes.CONTACT)
 async def set_manager_phone_contact(message: types.Message, state: FSMContext):
     if message.contact and message.contact.phone_number:
         await state.update_data(manager_phone=message.contact.phone_number)
-        await send_byd_summary(message, state)
+        await send_summary(message, state)
 
 @dp.message_handler(state=OrderState.manager_phone)
 async def set_manager_phone_manual(message: types.Message, state: FSMContext):
@@ -204,40 +366,92 @@ async def set_manager_phone_manual(message: types.Message, state: FSMContext):
         await message.answer("Введіть телефон вручну:")
         return
     await state.update_data(manager_phone=message.text)
-    await send_byd_summary(message, state)
+    await send_summary(message, state)
 
-async def send_byd_summary(message, state):
+# Финальное подтверждение и отправка админу
+async def send_summary(message, state):
     data = await state.get_data()
     lang = data.get('language', 'uk')
-    summary = (
-        f"Мова: {display_user_language(data.get('language', ''))}\n"
-        f"Бренд: BYD\n"
-        f"Місто: {data.get('city', '')}\n"
-        f"Тип послуги: {data.get('service_type', '')}\n"
-        f"Вартість послуги: {data.get('service_price', '')}\n"
-        f"Спосіб оплати: {data.get('service_payment', '')}\n"
-        f"VIN: {data.get('vin', '')}\n"
-        f"Dlink: {data.get('dlink', '')}\n"
-        f"Модель: {data.get('model', '')}\n"
-        f"Мова мультимедіа: {display_multimedia_lang(data.get('multimedia_lang', ''), lang)}\n"
-        f"Менеджер: {data.get('manager_name', '')}\n"
-        f"Телефон: {data.get('manager_phone', '')}"
-    )
+    brand = data.get('brand', 'BYD')
+    if brand == "Zeekr":
+        summary = (
+            f"Бренд: Zeekr\n"
+            f"Місто: {data.get('city', '')}\n"
+            f"Тип послуги: {data.get('service_type', '')}\n"
+            f"Вартість послуги: {data.get('service_price', '')}\n"
+            f"Спосіб оплати: {data.get('service_payment', '')}\n"
+            f"VIN: {data.get('vin', '')}\n"
+            f"Модель: {data.get('model', '')}\n"
+            f"Мова мультимедіа: {display_multimedia_lang(data.get('multimedia_lang', ''), lang)}\n"
+            f"Менеджер: {data.get('manager_name', '')}\n"
+            f"Телефон: {data.get('manager_phone', '')}"
+        )
+    else: # BYD
+        summary = (
+            f"Мова: {display_user_language(data.get('language', ''))}\n"
+            f"Бренд: BYD\n"
+            f"Місто: {data.get('city', '')}\n"
+            f"Тип послуги: {data.get('service_type', '')}\n"
+            f"Вартість послуги: {data.get('service_price', '')}\n"
+            f"Спосіб оплати: {data.get('service_payment', '')}\n"
+            f"VIN: {data.get('vin', '')}\n"
+            f"Dlink: {data.get('dlink', '')}\n"
+            f"Модель: {data.get('model', '')}\n"
+            f"Мова мультимедіа: {display_multimedia_lang(data.get('multimedia_lang', ''), lang)}\n"
+            f"Менеджер: {data.get('manager_name', '')}\n"
+            f"Телефон: {data.get('manager_phone', '')}"
+        )
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add(TEXTS['confirm_btn'][lang])
-    await message.answer(f"Перевірте дані:\n\n{summary}", reply_markup=kb)
+    kb.add(tr('confirm_btn', lang))
+    await message.answer(f"{tr('summary_title', lang)}\n\n{summary}", reply_markup=kb)
     await OrderState.confirm.set()
 
 @dp.message_handler(lambda m: m.text in ["Підтвердити", "Подтвердить"], state=OrderState.confirm)
 async def confirm_order(message: types.Message, state: FSMContext):
-    await message.answer("Замовлення прийняте! Дякую! ✅", reply_markup=types.ReplyKeyboardRemove())
+    lang = (await state.get_data()).get('language', 'uk')
+    await message.answer(tr('order_accepted', lang), reply_markup=types.ReplyKeyboardRemove())
     data = await state.get_data()
     await send_admin_order(message.from_user, data)
     await state.finish()
 
 async def send_admin_order(user, data):
-    # ... твоя функция отправки админу (см. выше) ...
-    pass
+    lang = data.get('language', 'uk')
+    username = user.username or "Без юзернейму"
+    if data.get('brand') == "Zeekr":
+        summary = (
+            f"Нова заявка від @{username}\n"
+            f"Бренд: Zeekr\n"
+            f"Місто: {data.get('city', '')}\n"
+            f"Тип послуги: {data.get('service_type', '')}\n"
+            f"Вартість послуги: {data.get('service_price', '')}\n"
+            f"Спосіб оплати: {data.get('service_payment', '')}\n"
+            f"VIN: {data.get('vin', '')}\n"
+            f"Модель: {data.get('model', '')}\n"
+            f"Мова мультимедіа: {display_multimedia_lang(data.get('multimedia_lang', ''), lang)}\n"
+            f"Менеджер: {data.get('manager_name', '')}\n"
+            f"Телефон: {data.get('manager_phone', '')}"
+        )
+    else:
+        summary = (
+            f"Нова заявка від @{username}\n"
+            f"Мова: {display_user_language(data.get('language', ''))}\n"
+            f"Бренд: BYD\n"
+            f"Місто: {data.get('city', '')}\n"
+            f"Тип послуги: {data.get('service_type', '')}\n"
+            f"Вартість послуги: {data.get('service_price', '')}\n"
+            f"Спосіб оплати: {data.get('service_payment', '')}\n"
+            f"VIN: {data.get('vin', '')}\n"
+            f"Dlink: {data.get('dlink', '')}\n"
+            f"Модель: {data.get('model', '')}\n"
+            f"Мова мультимедіа: {display_multimedia_lang(data.get('multimedia_lang', ''), lang)}\n"
+            f"Менеджер: {data.get('manager_name', '')}\n"
+            f"Телефон: {data.get('manager_phone', '')}"
+        )
+    for admin_id in ADMIN_USER_IDS:
+        try:
+            await bot.send_message(admin_id, summary)
+        except Exception as e:
+            print(f"Ошибка при отправке админ-уведомления: {e}")
 
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True)
