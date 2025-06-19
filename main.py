@@ -1,4 +1,9 @@
 import os
+if not os.path.isfile('google-credentials.json'):
+    creds_json = os.getenv("GOOGLE_CREDS")
+    if creds_json:
+        with open("google-credentials.json", "w") as f:
+            f.write(creds_json)
 import re
 import logging
 from aiogram import Bot, Dispatcher, types
