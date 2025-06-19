@@ -329,8 +329,14 @@ async def zeekr_service_type(message: types.Message, state: FSMContext):
         return
     data = await state.get_data()
     lang = data.get('language', 'uk')
-    if message.text in TEXTS["service_types"][lang]:
-        await state.update_data(service_type=message.text)
+    # Универсальное сравнение: сравниваем начало текста (без эмодзи)
+    match = None
+    for opt in TEXTS["service_types"][lang]:
+        if message.text.strip().startswith(opt.split()[0]):
+            match = opt
+            break
+    if match:
+        await state.update_data(service_type=match)
         await message.answer("✅")
         price_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
         price_kb.add(tr('cancel_form_btn', lang))
@@ -477,7 +483,7 @@ async def zeekr_summary(message, state):
     await message.answer(f"{tr('summary_title', lang)}\n\n{summary}", reply_markup=confirm_kb)
     await OrderState.confirm.set()
 
-# ...оставшаяся BYD-логика как раньше (без изменений)...
+# --- BYD: исправленный handler выбора типа услуги ---
 
 @dp.message_handler(state=OrderState.city)
 async def set_city(message: types.Message, state: FSMContext):
@@ -501,7 +507,28 @@ async def set_city(message: types.Message, state: FSMContext):
         await message.answer(tr('service_type', lang), reply_markup=service_kb)
         await OrderState.service_type.set()
 
-# ... остальные шаги для BYD не менялись, см. выше!
+@dp.message_handler(state=OrderState.service_type)
+async def set_service_type(message: types.Message, state: FSMContext):
+    if message.text in ["Скасувати анкету", "Отменить анкету"]:
+        return
+    data = await state.get_data()
+    lang = data.get('language', 'uk')
+    match = None
+    for opt in TEXTS["service_types"][lang]:
+        if message.text.strip().startswith(opt.split()[0]):
+            match = opt
+            break
+    if match:
+        await state.update_data(service_type=match)
+        await message.answer("✅")
+        price_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        price_kb.add(tr('cancel_form_btn', lang))
+        await message.answer("Введіть суму вартості послуги:", reply_markup=price_kb)
+        await OrderState.service_price.set()
+    else:
+        await message.answer(tr('service_type', lang), reply_markup=get_cancel_kb(lang, TEXTS["service_types"][lang]))
+
+# --- остальные шаги BYD и логика подтверждения, отправки админу, редактирования и т.д. не менялись ---
 
 @dp.message_handler(lambda m: m.text in ["Підтвердити", "Подтвердить"], state=OrderState.confirm)
 async def confirm_order(message: types.Message, state: FSMContext):
