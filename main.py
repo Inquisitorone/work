@@ -184,7 +184,7 @@ def append_to_gsheet(data):
         ]
         creds = ServiceAccountCredentials.from_json_keyfile_name('google-credentials.json', scope)
         client = gspread.authorize(creds)
-        sheet = client.open("Work").sheet1  # <-- ВАЖНО! Имя таблицы
+        sheet = client.open("Work").Лист1  # <-- ВАЖНО! Имя таблицы
 
         row = [
             datetime.now().strftime("%Y-%m-%d %H:%M"),
