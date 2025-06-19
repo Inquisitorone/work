@@ -21,8 +21,8 @@ class OrderState(StatesGroup):
     brand = State()
     city = State()
     service_type = State()
-    service_price = State()         # ← новое состояние для суммы услуги
-    service_payment = State()       # ← новое состояние для оплаты
+    service_price = State()
+    service_payment = State()
     vin = State()
     dlink = State()
     model = State()
@@ -243,9 +243,13 @@ async def set_language(message: types.Message, state: FSMContext):
     await state.update_data(language=lang)
     await message.answer("✅")
     await message.answer(INSTRUCTION[lang])
-    new_order_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    new_order_kb.add(tr('new_order_btn', lang))
-    await message.answer("Для початку виберіть замовлення.", reply_markup=new_order_kb)
+
+    # СРАЗУ показываем кнопки брендов!
+    brands_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    brands_kb.add(*BRANDS[lang])
+    brands_kb.add(tr('cancel_form_btn', lang))
+    await message.answer(tr('choose_brand', lang), reply_markup=brands_kb)
+    await OrderState.brand.set()
 
 @dp.message_handler(lambda m: m.text in ["Скасувати анкету", "Отменить анкету"], state='*')
 async def cancel_form(message: types.Message, state: FSMContext):
